@@ -1,0 +1,2629 @@
+openapi: 3.0.0
+info:
+  version: 'v1.0'
+  title: Scalyr API
+  description: |
+    # Scalyr API
+    You can use the Scalyr API to send and retrieve log data directly from Scalyr servers, as well as manage configuration files. It is usually most convenient to use the [Scalyr Agent](https://www.scalyr.com/help/scalyr-agent) to send log files, and to view logs on the web site. We also provide a [Java client library](https://www.scalyr.com/help/java-api) and a [command-line](https://www.scalyr.com/help/command-line) tool. But if you'd like to talk directly to the Scalyr servers from a language other than Java, you've come to the right place.
+
+    ## API FORMAT
+    (Note: this section does not apply to the uploadLogs API, which uses simple text bodies.)
+
+    To invoke a Scalyr API method, send an HTTPS POST to the URL for the method you wish to invoke. The request should have Content-Type "application/json", and the body should be a JSON-formatted, UTF-8 encoded string. The response is also a JSON-formatted, UTF-8 encoded string.
+
+    The query, numericQuery, facetQuery, and timeseriesQuery methods can also be invoked via GET, passing arguments in standard URL format. (Remember to encode spaces as %20.) When invoked in this fashion, the response will still be JSON.
+
+    The response will always include a "status" property, indicating whether the operation succeeded or failed. Status codes are hierarchical, with slash-delimited components. For example, "error/client" and "error/server" both indicate that the operation failed, but one indicates that the problem was the client's fault and the other the server's fault. New status values may be added in the future, but they will generally extend (refine) existing values. So when checking the status value, always be prepared for extra text — check startsWith() instead of equals(). Each method may list one or more responses specific to that method. In addition, the following responses are possible for all methods:
+
+      1. Response if the request is somehow incorrect ("your fault"):
+
+          ```
+          {
+            "status":  "error/client",
+            "message": "a human-readable message"
+          }
+          ```
+
+      2. Response if the server experiences an internal error while processing the request ("our fault"):
+
+          ```
+          {
+            "status":  "error/server",
+            "message": "a human-readable message"
+          }
+          ```
+
+      If the server is overloaded, or for some other reason is temporarily unable to process the request, it will return a status of "error/server/backoff". When this status is returned, you may wish to retry the request after a short delay. You should also retry after a delay in the case of server errors (5xx status code), 429 status code ("Too Many Requests"), or a request timeout.
+
+    Note that new status values, in particular new error statuses, may be added in the future. Please treat any unexpected status value like "error".
+
+    When an error is returned, the HTTP status code will contain an appropriate non-200 value. Some HTTP client libraries (such as the standard Java library) don't provide access to the response body when the status code is not 200, making it difficult to get a detailed error message. If you provide an "errorStatus" request header with value "always200", the Scalyr server will return a 200 status code even for errors. In this mode, to detect errors, check the JSON response body for a status string beginning with "error". Note that some low-level errors may still yield a non-200 status code.
+
+  termsOfService: 'https://www.scalyr.com/terms'
+  contact:
+    name: Scalyr
+    email: contact@scalyr.com
+  license:
+    name: Apache license
+    url: 'https://github.com/scalyr/scalyr-agent-2/blob/master/LICENSE.txt'
+servers:
+  - url: 'https://www.scalyr.com'
+    description: Scalyr Production servers
+
+
+
+paths:
+  "/api/uploadLogs":
+    post:
+      summary: /api/uploadLogs
+      description: |
+        # UPLOAD LOGS
+        [https://www.scalyr.com/api/uploadLogs](https://www.scalyr.com/api/uploadLogs) is a simple API for uploading raw log data to Scalyr servers. It is best suited for lightweight integrations, or uploading individual batches of data from a stateless environment such as Amazon Lambda. For complex use cases, you can also use the addEvents API.
+
+        From a traditional server environment, it is usually most convenient write your logs to disk, and use the Scalyr Agent to upload them. We also provide a Java client library.
+
+        ## API FORMAT
+        To use this API method, send an HTTPS request with the following fields:
+
+         - URL: https://www.scalyr.com/api/uploadLogs?token={your "write logs" token}
+         - Method: POST
+         - Content-Type: text/plain
+
+        The token URL parameter is a "Write Logs" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+
+        The request body should consist of one or more log messages, separated by line breaks (\n, \r, or \r\n). A line break after the last message is optional.
+
+        ### Note:
+        This API is not currently intended to ingest more than **10 GB/day**. If you are working with higher log volumes, you should use the Scalyr Agent or addEvents API, or contact us at [support@scalyr.com](support@scalyr.com).
+
+        ## SERVER / LOG ATTRIBUTES
+        You can add parameters to the URL, or as an HTTP request header, to tag messages as coming from a specific server and/or log file:
+
+        - **host** specifies the server name.
+
+        -  **logfile** specifies the log file name.
+
+        -  **parser** specifies which parser will be used to parse these messages (see [/help/parsing-logs](https://www.scalyr.com/help/parsing-logs)).
+
+        In addition, you can add arbitrary URL parameters or request headers beginning with "server-". For example, specify ``&server-region=us-east-1` to add a server field named "region", with value "us-east-1".
+
+        #### NOTE:
+         - To specify the server name in an HTTP request header, you must create a header named server-host. Creating a header named simply host will cause confusion, since this is a standard HTTP header.
+
+        ### RETRIES AND NONCES
+        To protect against double-uploads, you can include a **"Nonce"** header in the HTTPS request. This header may contain any value. Multiple requests with the same nonce in the same (roughly) one-minute period are ignored.
+
+
+        If you are implementing logic to retry failed requests, it is a good idea to use the Nonce header. Generate a unique value for each request, and re-use the value when retrying a request.
+
+        ### EXAMPLE
+          The following curl command will upload a single log message:
+
+          ```
+            curl -v 'https://www.scalyr.com/api/uploadLogs?token=BLABLA0RmUusVlr9/zBLABLAzur7hVjKL11w14-' \
+              -H 'Content-Type: text/plain' -d 'hello, world'
+          ```
+
+          If you'd like to test with multiple lines of input, note that the curl command tends to remove line breaks. Use curl's --data-binary option to avoid this.
+
+
+      parameters:
+        - name: 'token'
+          description: The token URL parameter is a "Write Logs" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+          in: 'query'
+          required: true
+          schema:
+            type: 'string'
+          example:
+            id:
+              value: write-log-api-key
+
+        - name: 'host'
+          description: host specifies the server name
+          in: 'query'
+          schema:
+            type: 'string'
+          example:
+            host:
+              value: aws
+
+        - name: 'logfile'
+          description: logfile specifies the log file name
+          in: 'query'
+          schema:
+            type: 'string'
+          example:
+            logfile:
+              value: server.log
+
+        - name: 'parser'
+          description: |
+            parser specifies which parser will be used to parse these messages (see [/help/parsing-logs](https://www.scalyr.com/help/parsing-logs)).
+          in: 'query'
+          schema:
+            type: 'string'
+          example:
+            parser:
+              value: myCustomParser
+
+        - name: 'Nonce'
+          description: |
+            To protect against double-uploads, you can include a "Nonce" header in the HTTPS request. This header may contain any value. Multiple requests with the same nonce in the same (roughly) one-minute period are ignored.
+
+            If you are implementing logic to retry failed requests, it is a good idea to use the Nonce header. Generate a unique value for each request, and re-use the value when retrying a request.
+          in: 'query'
+          schema:
+            type: number
+          example:
+            Nonce:
+              value: 12345678
+      requestBody:
+        content:
+          'text/plain':
+            schema:
+              type: string
+              format: text
+              example: hello, world
+      responses:
+              '200':
+                description: Everything went well
+                content:
+                  application/json;charset=UTF-8:
+                    schema:
+                      $ref: "#/components/schemas/200Success"
+
+              '400':
+                description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+                content:
+                  application/json;charset=UTF-8:
+                    schema:
+                      $ref: "#/components/schemas/4xxError"
+              '500':
+                description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+                content:
+                  application/json;charset=UTF-8:
+                    schema:
+                      $ref: "#/components/schemas/5xxError"
+
+
+
+  /addEvents:
+    post:
+      summary: /addEvents
+      description: |
+        This method is used to insert events (log records). You can insert one or more events per request If you are generating many events per second, you should group them into batches and have each server upload a batch every few seconds.
+
+        To upload raw log text, it is usually easier to use the [uploadLogs](https://www.scalyr.com/help/api-uploadLogs) method.
+
+
+        ### Note:
+        Only recent events (**events with a timestamp in the last few minutes**) can be uploaded. Due to the way Scalyr Logs indexes events, older events will be discarded. If this is a problem for you, [e-mail us](support@scalyr.com) and we can make adjustments for your account.
+      requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              required:
+                - token
+                - session
+              type: object
+              properties:
+                token:
+                  type: string
+                  description: |
+                    **token** should be a "Write Logs" API token. Find API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  example:
+                    BLABLA0RmUusVlr9/zBLABLAzur7hVjKL11w14-
+                session:
+                  type: string
+                  description: |
+                    **session** is an arbitrary string which should uniquely define the lifetime of the process which is uploading events. An easy way to generate the session parameter is to generate a UUID at process startup and store the value in a global variable. Do not create a new session identifier for each request; if you create too many session identifiers, we may be forced to rate-limit your account. However, you should use a different session for each server or process, as timestamps must be in-order within a session (discussed below).
+                  example: 1b671a64-40d5-491e-99b0-da01ff1f3341
+                sesionInfo:
+                  $ref: '#/components/schemas/SessionInfoObject'
+                events:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Event'
+                  description: |-
+                    **events** contains zero or more event records, as defined in the next section.
+
+                     (You may wish to review the Scalyr data model, as documented in the [Getting Started guide](https://www.scalyr.com/help/getting-started#data), before continuing. An event record looks like this.
+                threads:
+                  type: array
+                  description: |
+                    **threads** is optional. If present, it should contain a series of objects of the form {"id": "...", "name": "..."}, one for each unique thread ID appearing in the events list. This is used to associate a readable name with each thread.
+                  items:
+                    $ref: "#/components/schemas/AddEvents_Threads"
+
+
+      responses:
+              '200':
+                description: Everything went well
+                content:
+                  application/json;charset=UTF-8:
+                    schema:
+                      $ref: "#/components/schemas/200Success"
+
+              '400':
+                description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+                content:
+                  application/json;charset=UTF-8:
+                    schema:
+                      $ref: "#/components/schemas/4xxError"
+              '500':
+                description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+                content:
+                  application/json;charset=UTF-8:
+                    schema:
+                      $ref: "#/components/schemas/5xxError"
+  "/api/query":
+
+    get:
+      summary: /api/query
+      description: |
+          This method is used to retrieve events (log records). You can retrieve all events in a specified time range, or only events matching specific criteria
+
+          <br>
+          The query API can also be invoked using POST as shown below:
+
+          ```
+          Content-Type:  application/json;charset=UTF-8
+
+          Body:
+          {
+            "token":             "xxx",
+            "queryType":         "log",
+            "filter":            "...",
+            "startTime":         "...",
+            "endTime":           "...",
+            "maxCount":          nnn,
+            "pageMode":          "...",
+            "columns":           "...",
+            "continuationToken": "...",
+            "priority":          "..."
+          }
+          ```
+
+          <br>You can query using `curl` by passing the parameters using URL encoding:
+          ```
+          curl 'https://www.scalyr.com/api/query?queryType=log&maxCount=1&token=XXX'
+          ```
+          Note: When using GET, remember to encode spaces as %20.
+
+          <br>
+
+          Try the command-line tool. When invoked with the `--verbose` and `--output=json-pretty` options, the tool will output the raw JSON request and response objects:
+          ```
+          scalyr query --count=5 --verbose --output=json-pretty
+          ```
+          <br>
+
+          Here is an example GET query URL:
+
+          ```
+          https://www.scalyr.com/api/query?queryType=log&maxCount=5&token=XXX
+          ```
+
+      operationId: query
+      parameters:
+      - name: token
+        in: query
+        description: |
+          **token** should be a "Read Logs" API token. Find API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+        required: true
+        schema:
+          type: string
+        example: BLABLA0RmUusVlr9/zBLABLAzur7hVjKL11w14-
+      - name: queryType
+        in: query
+        description: |
+          **queryType** should be "log"
+        required: true
+        schema:
+          type: string
+          default: log
+      - name: filter
+        in: query
+        description: |
+          **filter** specifies which events to match, using the same syntax as the Expression field in the query UI. To match all events, omit this field or pass an empty string.
+        schema:
+          type: string
+        example: $serverHost='server-1'
+      - name: startTime
+        in: query
+        description: |
+          **startTime** and **endTime** specify the time range to query, using the same syntax as the Start and End fields in the query UI. You can also supply a simple timestamp, measured in seconds, milliseconds, or nanoseconds since 1/1/1970.
+
+          The default is to query the last 24 hours. If you specify `startTime` but not `endTime`, the query covers 24 hours beginning at the `startTime`. If you specify `endTime` but not `startTime`, the query covers 24 hours ending at the `endTime`.
+        schema:
+          type: string
+      - name: endTime
+        in: query
+        description: |
+          **startTime** and **endTime** specify the time range to query, using the same syntax as the Start and End fields in the query UI. You can also supply a simple timestamp, measured in seconds, milliseconds, or nanoseconds since 1/1/1970.
+
+          The default is to query the last 24 hours. If you specify startTime but not endTime, the query covers 24 hours beginning at the startTime. If you specify endTime but not startTime, the query covers 24 hours ending at the endTime.
+        schema:
+          type: string
+      - name: maxCount
+        in: query
+        description: |
+          **maxCount** specifies the maximum number of records to return. You may specify a value from 1 to 5000. The default is 100.
+        schema:
+          type: number
+          minimum: 1
+          maximum: 5000
+          default: 100
+      - name: pageMode
+        in: query
+        description: |
+          **pageMode** applies when the number of events matching the query is more than maxCount. Pass head to get the oldest matches in the specified time range, or tail to get the newest. The default is head if you specify a startTime, tail otherwise.
+        schema:
+          type: string
+          enum:
+            - head
+            - tail
+          default: tail
+      - name: columns
+        in: query
+        description: |
+          **columns** specifies which fields to return for each log message. Omit this parameter (or pass an empty string) to return all fields.
+        schema:
+          type: string
+      - name: continuationToken
+        in: query
+        description: |
+          **continuationToken** is used to page through result sets larger than maxCount. Omit this parameter for your first query. You may then repeat the query with the same `filter`, `startTime`, `endTime`, and `pageMode` to retrieve further matches. Each time, set continuationToken to the value returned by the previous query.
+
+          **Note:** When using continuationToken, you should set `startTime` and `endTime` to absolute values, not relative values such as `4h`. If you use relative time values, and the time range drifts so that the continuation token refers to an event that falls outside the new time range, the query will fail.
+        schema:
+          type: string
+
+      - name: priority
+        in: query
+        description: |
+          **priority** specifies the execution priority for this query; defaults to "low". Use "low" for background operations where a delay of a second or so is acceptable. Low-priority queries have more generous rate limits
+        schema:
+          type: string
+          default: low
+          enum:
+            - high
+            - medium
+            - low
+
+      responses:
+          '200':
+            description: Everything went well
+            content:
+              application/json;charset=UTF-8:
+                schema:
+                  $ref: "#/components/schemas/LogQuerySuccess"
+
+          '400':
+            description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+            content:
+              application/json;charset=UTF-8:
+                schema:
+                  $ref: "#/components/schemas/4xxError"
+          '500':
+            description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+            content:
+              application/json;charset=UTF-8:
+                schema:
+                  $ref: "#/components/schemas/5xxError"
+
+  /api/numericQuery:
+      get:
+        summary: /api/numericQuery
+        description: |
+          ## NUMERIC QUERY
+            This method is used to retrieve numeric data, e.g. for graphing. You can count the rate of events matching some criterion (e.g. error rate), or retrieve a numeric field (e.g. response size).
+
+          <br>
+
+            If you will be be invoking the same query repeatedly, you may want to create a timeseries for the query. This is especially useful if you are using the Scalyr API to feed a home-built dashboard, alerting system, or other automated tool. A timeseries precomputes a numeric query, allowing you to execute queries almost instantaneously, and without exhausting your query execution limit (see below). Use the [createTimeseries](https://www.scalyr.com/help/api?teamToken=GHegMHe4UQtLS%2FiIZsLxxg--#createTimeseries) method to create a [timeseries](https://www.scalyr.com/help/api?teamToken=GHegMHe4UQtLS%2FiIZsLxxg--#timeseriesQuery), and timeseriesQuery to execute queries using a timeseries.
+
+          <br>
+
+
+          #### URL
+          ```
+          https://www.scalyr.com/api/numericQuery
+          ```
+
+          <br>
+
+          You may also use `POST` to query this instead of `GET` and pass the following in the body.
+          ```
+          {
+            "token":             "xxx",
+            "queryType":         "numeric",
+            "filter":            "...",
+            "function":          "...",
+            "startTime":         "...",
+            "endTime":           "...",
+            "buckets":           nnn,
+            "priority":          "..."
+          }
+          ```
+
+          <br>
+
+          The numericQuery API can also be invoked using GET, passing the parameters using URL encoding:
+
+          ```
+          curl 'https://www.scalyr.com/api/numericQuery?queryType=numeric&startTime=1h&token=XXX'
+          ```
+
+          When using GET, remember to encode spaces as %20.
+
+          <br>
+
+          Try the command-line tool. When invoked with the `--verbose` and `--output=json-pretty` options, the tool will output the raw JSON request and response objects:
+
+          ```
+          scalyr numeric-query --start 1h --buckets 10 --verbose --output=json-pretty
+
+          ```
+          <br>
+          Here is an example GET query URL:
+
+          ```
+          https://www.scalyr.com/api/numericQuery?queryType=numeric&startTime=1h&buckets=60&token=XXX
+          ```
+
+        operationId: numericQuery
+        parameters:
+        - name: token
+          in: query
+          description: |
+            **token** should be a "Read Logs" API token. Find API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+          required: true
+          schema:
+            type: string
+          example: BLABLA0RmUusVlr9/zBLABLAzur7hVjKL11w14-
+        - name: queryType
+          in: query
+          description: |
+            **queryType** should be "numeric"
+          required: true
+          schema:
+            type: string
+            default: numeric
+        - name: filter
+          in: query
+          description: |
+            **filter** specifies which events to match, using the same syntax as the Expression field in the query UI. To match all events, omit this field or pass an empty string.
+          schema:
+            type: string
+        - name: function
+          in: query
+          description: |
+              **function** specifies the value to compute from the matching events. You can use any function listed in [Graph Functions](https://www.scalyr.com/help/query-language#graphFunctions), except for `fraction(expr)`.
+
+              For example: `mean(x)` or `median(responseTime)`, if `x` and `responseTime` are fields of your log. You can also specify a simple field name, such as `responseTime`, to return the `mean` value of that field. If you omit the function argument, the rate of matching events per second will be returned. Specifying rate yields the same result.
+          schema:
+            type: string
+          example: "mean(<fieldName>)"
+        - name: startTime
+          in: query
+          description: |
+            **startTime** and **endTime** specify the time range to query, using the same syntax as the Start and End fields in the query UI. You can also supply a simple timestamp, measured in seconds, milliseconds, or nanoseconds since 1/1/1970.
+
+            The default is to query the last 24 hours. If you specify `startTime` but not `endTime`, the query covers 24 hours beginning at the `startTime`. If you specify `endTime` but not `startTime`, the query covers 24 hours ending at the `endTime`.
+          schema:
+            type: string
+        - name: endTime
+          in: query
+          description: |
+            **startTime** and **endTime** specify the time range to query, using the same syntax as the Start and End fields in the query UI. You can also supply a simple timestamp, measured in seconds, milliseconds, or nanoseconds since 1/1/1970.
+
+            The default is to query the last 24 hours. If you specify startTime but not endTime, the query covers 24 hours beginning at the startTime. If you specify endTime but not startTime, the query covers 24 hours ending at the endTime.
+          schema:
+            type: string
+        - name: buckets
+          in: query
+          description: |
+            buckets specifies the number of numeric values to return. The time range is divided into this many equal slices. For instance, suppose you query a four-hour period, with buckets = 4. The query will return four numbers, each covering a one-hour period.
+
+              You may specify a value from 1 to 5000. The default is 1.
+
+          schema:
+            type: number
+            minimum: 1
+            maximum: 5000
+            default: 1
+        - name: priority
+          in: query
+          description: |
+            **priority** specifies the execution priority for this query; defaults to "low". Use "low" for background operations where a delay of a second or so is acceptable. Low-priority queries have more generous rate limits
+          schema:
+            type: string
+            default: low
+            enum:
+              - high
+              - medium
+              - low
+        responses:
+          '200':
+            description: Everything went well
+            content:
+              application/json;charset=UTF-8:
+                schema:
+                  $ref: "#/components/schemas/NumericQuerySuccess"
+
+          '400':
+            description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+            content:
+              application/json;charset=UTF-8:
+                schema:
+                  $ref: "#/components/schemas/4xxError"
+          '500':
+            description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+            content:
+              application/json;charset=UTF-8:
+                schema:
+                  $ref: "#/components/schemas/5xxError"
+
+  /api/facetQuery:
+      get:
+        summary: /api/facetQuery
+        description: |
+          ## FACET QUERY
+            This method is used to retrieve the most common values for a field. For instance, you can find the most common URLs accessed on your site, the most common user-agent strings, or the most common response codes returned.
+
+          ### URL
+            ```
+            https://www.scalyr.com/api/facetQuery
+            ```
+
+            <br>
+
+            You may also use `POST` and pass the following in the body in JSON format.
+
+            ```
+            {
+              "token":             "xxx",
+              "queryType":         "facet",
+              "filter":            "...",
+              "field":             "...",
+              "maxCount":          nnn,
+              "startTime":         "...",
+              "endTime":           "...",
+              "priority":          "..."
+            }
+            ```
+
+          <br>
+
+          ### Examples
+          To see the query API in action, try the [command-line](https://github.com/scalyr/scalyr-tool) tool. When invoked with the `--verbose` and `--output=json-pretty` options, the tool will output the raw JSON request and response objects:
+
+          ```
+          scalyr facet-query '$dataset="accessLog"' uriPath --start 1h --verbose
+          ```
+
+          Here is an example GET query URL:
+
+          ```
+          https://www.scalyr.com/api/facetQuery?queryType=facet&field=uriPath&startTime=1h&token=XXX
+          ```
+
+          ### Notes
+          If a very large number of events match your filter, the results will be based on a random subsample of matching events. The subsample will contain at least `500,000` events.
+        operationId: facetQuery
+        parameters:
+        - name: token
+          in: query
+          description: |
+            **token** should be a "Read Logs" API token. Find API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+          required: true
+          schema:
+            type: string
+          example: BLABLA0RmUusVlr9/zBLABLAzur7hVjKL11w14-
+        - name: queryType
+          in: query
+          description: |
+            **queryType** should be "facet"
+          required: true
+          schema:
+            type: string
+            default: facet
+        - name: filter
+          in: query
+          description: |
+            **filter** specifies which events to match, using the same syntax as the Expression field in the query UI. To match all events, omit this field or pass an empty string.
+          schema:
+            type: string
+        - name: field
+          in: query
+          description: |
+            **field** specifies the event field to retrieve
+          schema:
+            type: string
+        - name: maxCount
+          in: query
+          description: |
+            **maxCount** specifies the maximum number of records to return. You may specify a value from 1 to 1000. The default is 100.
+          schema:
+            type: number
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: startTime
+          in: query
+          description: |
+            **startTime** and **endTime** specify the time range to query, using the same syntax as the Start and End fields in the query UI. You can also supply a simple timestamp, measured in seconds, milliseconds, or nanoseconds since 1/1/1970.
+
+            The default is to query the last 24 hours. If you specify `startTime` but not `endTime`, the query covers 24 hours beginning at the `startTime`. If you specify `endTime` but not `startTime`, the query covers 24 hours ending at the `endTime`.
+          schema:
+            type: string
+        - name: endTime
+          in: query
+          description: |
+            **startTime** and **endTime** specify the time range to query, using the same syntax as the Start and End fields in the query UI. You can also supply a simple timestamp, measured in seconds, milliseconds, or nanoseconds since 1/1/1970.
+
+            The default is to query the last 24 hours. If you specify startTime but not endTime, the query covers 24 hours beginning at the startTime. If you specify endTime but not startTime, the query covers 24 hours ending at the endTime.
+          schema:
+            type: string
+        - name: priority
+          in: query
+          description: |
+            **priority** specifies the execution priority for this query; defaults to "low". Use "low" for background operations where a delay of a second or so is acceptable. Low-priority queries have more generous rate limits
+          schema:
+            type: string
+            default: low
+            enum:
+              - high
+              - medium
+              - low
+        responses:
+          '200':
+            description: Everything went well
+            content:
+              application/json;charset=UTF-8:
+                schema:
+                  $ref: "#/components/schemas/FacetQuerySuccess"
+
+          '400':
+            description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+            content:
+              application/json;charset=UTF-8:
+                schema:
+                  $ref: "#/components/schemas/4xxError"
+          '500':
+            description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+            content:
+              application/json;charset=UTF-8:
+                schema:
+                  $ref: "#/components/schemas/5xxError"
+
+  /api/createTimeseries:
+    post:
+      summary: /api/createTimeseries
+      description: |
+        ## CREATE TIMESERIES
+        This method is used to create a timeseries. A timeseries precomputes a numeric query, allowing you to execute queries almost instantaneously. This is useful for queries that you execute repeatedly. If you are using the Scalyr API to feed a home-built dashboard, alerting system, or other automated tool, timeseries are for you.
+
+        It may take up to half an hour for a timeseries to be fully created. During that time, you can query the timeseries, but queries may not execute as quickly. Recent data is accelerated before older data.
+
+        You can create at most 10,000 timeseries. To avoid accidental exhaustion of this limit, creation of new timeseries is limited to 100 per hour, with bursts of up to 100. If you need to create timeseries more rapidly, contact us at support@scalyr.com.
+
+        ### URL
+        ```
+        https://www.scalyr.com/api/createTimeseries
+        ```
+        <br>
+
+        You may `POST` to this endpoint with the following parameters.
+
+        ```
+          Input
+          {
+            "token":             "xxx",
+            "queryType":         "numeric",
+            "filter":            "...",
+            "function":          "..."
+          }
+        ```
+
+      requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+                - queryType
+              properties:
+                token:
+                  description: The token URL parameter is a "Write Logs" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: 'string'
+                  example: write-log-api-key
+
+                queryType:
+                  description: |
+                    **queryType** should be "numeric"
+                  type: string
+                  default: numeric
+                  example: numeric
+
+                filter:
+                  description: |
+                    **filter** specifies which events to match, using the same syntax as the Expression field in the query UI. To match all events, omit this field or pass an empty string.
+                  type: string
+                  example: $serverHost='server-1'
+
+                function:
+                  description: |
+                    **function** specifies the value to compute from the matching events. You can use any function listed in [Graph Functions](https://www.scalyr.com/help/query-language#graphFunctions), except for `fraction(expr)`.
+
+                    For example: `mean(x)` or `median(responseTime)`, if `x` and `responseTime` are fields of your log. You can also specify a simple field name, such as `responseTime`, to return the `mean` value of that field. If you omit the function argument, the rate of matching events per second will be returned. Specifying rate yields the same result.
+                  type: string
+                  example: "mean(<fieldName>)"
+
+
+
+      responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/CreateTimeseriesSuccess"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+  /api/timeseriesQuery:
+    post:
+     summary: /api/timeseriesQuery
+     description: |
+        ## TIMESERIES QUERY
+        This method is used to retrieve numeric data from a previously defined timeseries. It is similar to the [numericQuery](https://www.scalyr.com/help/api?teamToken=GHegMHe4UQtLS%2FiIZsLxxg--#numericQuery) method, but relies on parameters defined by a previous call to createTimeseries, and usually executes in a few milliseconds (plus network latency of course). The timeseriesQuery method also allows you to execute multiple queries in a single request.
+
+        ### URL
+
+        ```
+        https://www.scalyr.com/api/timeseriesQuery
+        ```
+
+        ### POST parameters
+
+        ```
+           {
+              "token":             "xxx",
+              "queries": [
+                {
+
+                      "timeseriesId":      "...",
+                      "filter":            "...",
+                      "function":          "...",
+                      "startTime":         "...",
+                      "endTime":           "...",
+                      "buckets":           nnn,
+                      "priority":          "..."
+                },
+                ...
+              ]
+            }
+
+        ```
+     requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+                - queries
+              properties:
+                token:
+                  description: The token URL parameter is a "Read Logs" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: string
+                  example: read-log-api-key
+                queries:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/TimeseriesQuery_queries'
+
+
+
+
+     responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/TimeseriesQuerySuccess"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+
+
+  /getFile:
+    post:
+     summary: /getFile
+     description: |
+
+        ## GETFILE
+        This method is used to retrieve a configuration file. You can also use this method to block until the file is changed.
+
+        ### URL
+
+        ```
+        https://www.scalyr.com/getFile
+        ```
+
+        <br>
+
+        Example `POST`:
+
+        ```
+          Input
+          {
+            "token":           "xxx",
+            "path":            "/foo",
+            "expectedVersion": 3,        // optional
+            "prettyprint":     false     // optional
+          }
+        ```
+     requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+                - path
+              properties:
+                token:
+                  description: |
+                    **token** URL parameter is a "Read Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: string
+                  example: read-configuration-api-key
+                path:
+                  type: string
+                  description: |
+                    **path** is the file path, as listed at [https://www.scalyr.com/files](https://www.scalyr.com/files). See the [Configuration Files](https://www.scalyr.com/help/config) page for more information about configuration files and file names/paths.
+                  example: /foo
+                expectedVersion:
+                  type: number
+                  description: |
+                    **expectedVersion** is optional. If `expectedVersion` is specified, and matches the file's current version, a status/unchanged response will be returned (see below).
+                  example: 3
+                prettyPrint:
+                  type: boolean
+                  default: false
+                  enum:
+                    - true
+                    - false
+                  description: |
+                    **prettyprint** is optional (defaults to false). If true, then we return a prettyprinted representation of the file's content. (Assumes the file is JSON.)
+                  example: true
+
+     responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/GetFileSuccess"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+
+
+  /putFile:
+    post:
+     summary: /putFile
+     description: |
+
+          ## PUTFILE
+            This method is used to create, update, or delete a configuration file.
+
+          ### URL
+
+          ```
+            https://www.scalyr.com/putFile
+          ```
+
+          ### Create or update
+          To create or update a file:
+
+          ```
+          {
+            "token":           "xxx",
+            "path":            "/foo",
+            "content":         "...",
+            "prettyprint":     false,   // optional
+            "expectedVersion": 3        // optional
+          }
+          ```
+
+          <br>
+          ### Delete
+          To delete a configuration file:
+
+          ```
+          {
+            "token":           "xxx",
+            "path":            "/foo",
+            "deleteFile":      true,
+            "expectedVersion": 3        // optional
+          }
+          ```
+
+     requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+                - path
+              properties:
+                token:
+                  description: |
+                    **token** URL parameter is a "Write Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: string
+                  example: write-configuration-api-key
+                path:
+                  type: string
+                  description: |
+                    **path** is the file path, as listed at [https://www.scalyr.com/files](https://www.scalyr.com/files). See the [Configuration Files](https://www.scalyr.com/help/config) page for more information about configuration files and file names/paths.
+                  example: /foo
+                content:
+                  type: string
+                  description: |
+                    **content** is the content for the new/updated file.
+                  example: This is file's content
+                prettyPrint:
+                  type: boolean
+                  default: false
+                  enum:
+                    - true
+                    - false
+                  description: |
+                    **prettyprint** is optional (defaults to false). If true, then we return a prettyprinted representation of the file's content. (Assumes the file is JSON.)
+                  example: true
+                deleteFile:
+                  type: boolean
+                  default: false
+                  description: |
+                    **deleteFile** indicates that this is a delete operation, rather than a create or update.
+                  example: false
+                expectedVersion:
+                  type: number
+                  description: |
+                    **expectedVersion** is optional. If specified, and the file's current version is a different value, an `error/client/versionMismatch` response will be returned (see below).
+                  example: 3
+
+
+     responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/200Success"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+
+  /listFiles:
+    post:
+     summary: /listFiles
+     description: |
+      ## LISTFILES
+      This method is used to list all configuration files.
+
+      ### URL
+
+      ```
+      https://www.scalyr.com/listFiles
+      ```
+
+      You should `POST` the following.
+
+      ```
+        Input
+        {
+          "token": "xxx"
+        }
+      ```
+     requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  description: |
+                    **token** URL parameter is a "Read Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: string
+                  example: read-configuration-api-key
+
+
+     responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/ListFileSuccess"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+
+
+  /api/inviteUser:
+    post:
+     summary: /api/inviteUser
+     description: |
+      ## INVITEUSER
+      This method invites a user to a join team and grants them permission to access the team's data. If the user did not have a Scalyr account, an account will be created for them.
+
+      ### URL
+
+      ```
+      https://www.scalyr.com/api/inviteUser
+      ```
+
+      ### Input
+
+      ```
+      {
+          "token":             "xxx",
+          "emailAddress":      "xxx@xxx.xxx",
+          "permission":        "full",
+          "allowedSearch":     "",
+          "allowedDashboards": [],
+          "groups":            []
+      }
+      ```
+
+     requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+                - emailAddress
+                - permission
+              properties:
+                token:
+                  description: |
+                    **token** URL parameter is a "Write Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: string
+                  example: write-configuration-api-key
+                emailAddress:
+                  type: string
+                  description: |
+                    **emailAddress** is the address of the user to invite.
+                  example: xxx@xyz.com
+                permission:
+                  type: string
+                  description: |
+                    **permission** is the user's access level: full, readLog, or limited. See [Manage Users](https://www.scalyr.com/help/users) for a discussion of access levels.
+                  default: limited
+                  enum:
+                    - full
+                    - readLog
+                    - limited
+                  example: limited
+                allowedSearch:
+                  type: string
+                  description: |
+                    **allowedSearch** is only needed for users with `limited` permission. It should be a `filter` expression specifying which data the user is allowed to access.
+                  example: "$serverHost='server-1'"
+                allowedDashboards:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    **allowedDashboards** is only needed for users with `limited` permission. It should be a list of dashboard names, indicating which dashboards this user can view.
+                  example: ["dashboard1", "dashboard2"]
+                groups:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                     **groups** specifies which groups the user belongs to. This parameter is optional; if not specified, then the user's group memberships are not changed. See [groups](https://www.scalyr.com/help/users#groups) for more information.
+                  example: ["group1", "group2"]
+
+
+
+
+
+
+
+     responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/200Success"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+
+  /api/editUserPermissions:
+     post:
+      summary: /api/editUserPermissions
+      description: |
+
+        ## EDITUSERPERMISSIONS
+        This method updates a user's access permissions within a team.
+
+
+        ### URL
+        ```
+          https://www.scalyr.com/api/editUserPermissions
+         ```
+
+        <br>
+
+        ### Input
+
+        ```
+          {
+              "token":             "xxx",
+              "emailAddress":      "xxx@xxx.xxx",
+              "permission":        "full",
+              "allowedSearch":     "",
+              "allowedDashboards": [],
+              "groups":            []
+          }
+        ```
+
+      requestBody:
+         content:
+           application/json;charset=UTF-8:
+             schema:
+               type: object
+               required:
+                 - token
+                 - name
+                 - permission
+               properties:
+                 token:
+                   description: |
+                     **token** URL parameter is a "Write Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                   type: string
+                   example: write-configuration-api-key
+                 emailAddress:
+                   type: string
+                   description: |
+                     **emailAddress**  is the address of the user whose permissions will be updated.
+                   example: xxx@xxx.xxx
+                 permission:
+                   type: string
+                   description: |
+                     **permission** is the user's access level: full, readLog, or limited. See [Manage Users](https://www.scalyr.com/help/users) for a discussion of access levels.
+                   default: limited
+                   enum:
+                     - full
+                     - readLog
+                     - limited
+                   example: limited
+                 allowedSearch:
+                   type: string
+                   description: |
+                     **allowedSearch** is only needed for users with `limited` permission. It should be a `filter` expression specifying which data the group is allowed to access.
+                   example: "$serverHost='server-1'"
+                 allowedDashboards:
+                   type: array
+                   items:
+                     type: string
+                   description: |
+                     **allowedDashboards** is only needed for users with `limited` permission. It should be a list of dashboard names, indicating which dashboards this group can view.
+                   example: ["dashboard1", "dashboard2"]
+
+      responses:
+         '200':
+           description: Everything went well
+           content:
+             application/json;charset=UTF-8:
+               schema:
+                 $ref: "#/components/schemas/200Success"
+
+         '400':
+           description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+           content:
+             application/json;charset=UTF-8:
+               schema:
+                 $ref: "#/components/schemas/4xxError"
+         '500':
+           description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+           content:
+             application/json;charset=UTF-8:
+               schema:
+                 $ref: "#/components/schemas/5xxError"
+
+
+  /api/revokeAccess:
+    post:
+     summary: /api/revokeAccess
+     description: |
+
+      ## REVOKEACCESS
+      This method revokes a user's access.
+
+      ### URL
+      ```
+        https://www.scalyr.com/api/revokeAccess
+      ```
+      ### Input
+
+      ```
+        {
+            "token":             "xxx",
+            "emailAddress":      "xxx@xxx.xxx"
+        }
+      ```
+
+     requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+                - emailAddress
+              properties:
+                token:
+                  description: |
+                    **token** URL parameter is a "Write Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: string
+                  example: write-configuration-api-key
+                emailAddress:
+                  type: string
+                  description: |
+                    **emailAddress** is the address of the user whose team access will be revoked.
+                  example: xyz@abc.com
+
+     responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/200Success"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+
+  /api/listUsers:
+    post:
+     summary: /api/listUsers
+     description: |
+
+        ## LISTUSERS
+        This method lists all users with access to the team, with their associated permissions.
+
+        ### URL
+        ```
+          https://www.scalyr.com/api/listUsers
+        ```
+
+        <br>
+
+        ### Input
+
+        ```
+          {
+              "token":  "xxx"
+          }
+        ```
+
+        ### Response example
+
+        ```
+          {
+            "users": [
+              {
+                "email": "alice@example.com",
+                "permissions": "limited",
+                "allowedSearch": "$serverHost='server-1'", // only relevant for ``limited`` permission
+                "allowedDashboards": [                     // only relevant for ``limited`` permission
+                  "Log Volume",
+                  "WebServer"
+                ]
+              },
+              {
+                "email": "bob@example.com",
+                "permissions": "full"
+              }
+            ],
+            "status": "success"
+          }
+        ```
+
+     requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  description: |
+                    **token** URL parameter is a "Read Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: string
+                  example: read-configuration-api-key
+
+     responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/ListUsersSuccess"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+
+
+  /api/addGroup:
+    post:
+     summary: /api/addGroup
+     description: |
+
+        ## ADDGROUP
+        This method creates a permission group. See groups for more information.
+
+        ### URL
+        ```
+          https://www.scalyr.com/api/addGroup
+        ```
+
+        <br>
+
+        ### Input
+        ```
+          {
+              "token":             "xxx",
+              "name":              "Group Name",
+              "permission":        "limited",
+              "allowedSearch":     "",
+              "allowedDashboards": []
+          }
+        ```
+
+     requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+                - name
+                - permission
+              properties:
+                token:
+                  description: |
+                    **token** URL parameter is a "Write Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: string
+                  example: write-configuration-api-key
+                name:
+                  type: string
+                  description: |
+                    **name** is the name of the group. Group names are not case sensitive.
+                  example: My Group 1
+                permission:
+                  type: string
+                  description: |
+                    **permission** is the groups's access level: full, readLog, or limited. See [Manage Users](https://www.scalyr.com/help/users) for a discussion of access levels.
+                  default: limited
+                  enum:
+                    - full
+                    - readLog
+                    - limited
+                  example: limited
+                allowedSearch:
+                  type: string
+                  description: |
+                    **allowedSearch** is only needed for groups with `limited` permission. It should be a `filter` expression specifying which data the group is allowed to access.
+                  example: "$serverHost='server-1'"
+                allowedDashboards:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    **allowedDashboards** is only needed for groups with `limited` permission. It should be a list of dashboard names, indicating which dashboards this group can view.
+                  example: ["dashboard1", "dashboard2"]
+
+     responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/200Success"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+
+  /api/editGroupPermissions:
+     post:
+      summary: /api/editGroupPermissions
+      description: |
+
+        ## EDITGROUPPERMISSIONS
+        This method updates a group's access permissions within a team.
+
+        ### URL
+        ```
+          https://www.scalyr.com/api/editGroupPermissions
+         ```
+
+        <br>
+
+        ### Input
+
+        ```
+        {
+            "token":             "xxx",
+            "name":              "Group Name",
+            "permission":        "limited",
+            "allowedSearch":     "",
+            "allowedDashboards": []
+        }
+        ```
+
+      requestBody:
+         content:
+           application/json;charset=UTF-8:
+             schema:
+               type: object
+               required:
+                 - token
+                 - name
+                 - permission
+               properties:
+                 token:
+                   description: |
+                     **token** URL parameter is a "Write Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                   type: string
+                   example: write-configuration-api-key
+                 name:
+                   type: string
+                   description: |
+                     **name** is the name of the group whose permission will be updated.
+                   example: My Group 1
+                 permission:
+                   type: string
+                   description: |
+                     **permission** is the groups's access level: full, readLog, or limited. See [Manage Users](https://www.scalyr.com/help/users) for a discussion of access levels.
+                   default: limited
+                   enum:
+                     - full
+                     - readLog
+                     - limited
+                   example: limited
+                 allowedSearch:
+                   type: string
+                   description: |
+                     **allowedSearch** is only needed for groups with `limited` permission. It should be a `filter` expression specifying which data the group is allowed to access.
+                   example: "$serverHost='server-1'"
+                 allowedDashboards:
+                   type: array
+                   items:
+                     type: string
+                   description: |
+                     **allowedDashboards** is only needed for groups with `limited` permission. It should be a list of dashboard names, indicating which dashboards this group can view.
+                   example: ["dashboard1", "dashboard2"]
+
+      responses:
+         '200':
+           description: Everything went well
+           content:
+             application/json;charset=UTF-8:
+               schema:
+                 $ref: "#/components/schemas/200Success"
+
+         '400':
+           description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+           content:
+             application/json;charset=UTF-8:
+               schema:
+                 $ref: "#/components/schemas/4xxError"
+         '500':
+           description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+           content:
+             application/json;charset=UTF-8:
+               schema:
+                 $ref: "#/components/schemas/5xxError"
+
+
+  /api/removeGroup:
+    post:
+     summary: /api/removeGroup
+     description: |
+
+        ## REMOVEGROUP
+        This method removes a group from the team.
+
+        ### URL
+        ```
+         https://www.scalyr.com/api/removeGroup
+        ```
+
+        <br>
+
+        ### Input
+        ```
+          {
+              "token":             "xxx",
+              "name":              "Group Name"
+          }
+        ```
+
+     requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+                - name
+              properties:
+                token:
+                  description: |
+                    **token** URL parameter is a "Write Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: string
+                  example: write-configuration-api-key
+                name:
+                  type: string
+                  description: |
+                    **name** is the name of the group to be removed.
+                  example: My Group 1
+
+     responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/200Success"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+
+  /api/listGroups:
+    post:
+     summary: /api/listGroups
+     description: |
+
+        ## LISTGROUPS
+        This method lists all groups with access to the team, with their associated permissions.
+
+
+        ### URL
+        ```
+          https://www.scalyr.com/api/listGroups
+
+        ```
+
+        <br>
+
+        ### Input
+
+        ```
+          {
+              "token":  "xxx"
+          }
+        ```
+
+        ### Response example
+
+        ```
+          {
+            "groups": [
+              {
+                "permissions": "limited",
+                "name": "Group Name",
+                "allowedDashboards": [        // only relevant for ``limited`` permission
+                  "Log Volume",
+                  "WebServer"
+                ],
+                "allowedSearch": "$serverHost='server-1'"        // only relevant for ``limited`` permission
+              },
+              ...
+            ]
+            "status": "success"
+          }
+        ```
+        This contains a list of all groups in this team, with their associated permissions. The schema is the same as in the [/scalyr/logs configuration file](https://www.scalyr.com/help/users#groups), but the response will be pure JSON with no comments or other nonstandard features.
+
+
+
+     requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  description: |
+                    **token** URL parameter is a "Read Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: string
+                  example: read-configuration-api-key
+
+     responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/ListGroupsSuccess"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+
+  /api/addUsersToGroup:
+    post:
+     summary: /api/addUsersToGroup
+     description: |
+
+        ## ADDUSERSTOGROUP
+        This method adds one or more users to a group.
+
+
+        ### URL
+        ```
+          https://www.scalyr.com/api/addUsersToGroup
+
+        ```
+
+        <br>
+
+        ### Input
+
+        ```
+          {
+              "token":             "xxx",
+              "groupName":         "Group Name",
+              "userEmails":        ["alice@example.com", "bob@example.com"]
+          }
+        ```
+
+        ### Response example
+
+        ```
+          {
+              "status":        "success",
+              "updatedUsers":  ["xxx@xxx.xxx", "nnn@nnn.nnn"
+          }
+        ```
+        An error is indicated by a response object whose status field does not begin with success. See the API Overview section for details. Otherwise, the response should have the following structure:
+
+
+     requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+                - groupName
+                - userEmails
+              properties:
+                token:
+                  description: |
+                    **token** URL parameter is a "Write Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: string
+                  example: write-configuration-api-key
+
+                groupName:
+                  description: |
+                    **groupName** is the name of the group.
+                  type: string
+                  example: "My Group 1"
+                userEmails:
+                  description: |
+                    **userEmails** lists the users to be added to the group.
+                  type: array
+                  items:
+                    type: string
+                  example: ["xxx@xxx.xxx", "nnn@nnn.nnn"]
+
+
+
+     responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/AddUsersToGroupSuccess"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+  /api/removeUsersFromGroup:
+    post:
+     summary: /api/removeUsersFromGroup
+     description: |
+
+        ## REMOVEUSERSFROMGROUP
+        This method removes one or more users from a group.
+
+
+        ### URL
+        ```
+          https://www.scalyr.com/api/removeUsersFromGroup
+
+        ```
+
+        <br>
+
+        ### Input
+
+        ```
+          {
+              "token":             "xxx",
+              "groupName":         "Group Name",
+              "userEmails":        ["alice@example.com", "bob@example.com"]
+          }
+        ```
+
+        ### Response example
+        An error is indicated by a response object whose status field does not begin with success. See the API Overview section for details. Otherwise, the response should have the following structure:
+
+        ```
+          {
+              "status":        "success",
+              "updatedUsers":  ["xxx@xxx.xxx", "nnn@nnn.nnn"
+          }
+        ```
+        An error is indicated by a response object whose status field does not begin with success. See the API Overview section for details. Otherwise, the response should have the following structure:
+
+
+     requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+                - groupName
+                - userEmails
+              properties:
+                token:
+                  description: |
+                    **token** URL parameter is a "Write Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: string
+                  example: write-configuration-api-key
+
+                groupName:
+                  description: |
+                    **groupName** is the name of the group.
+                  type: string
+                  example: "My Group 1"
+                userEmails:
+                  description: |
+                    **userEmails** lists the users to be removed from the group.
+                  type: array
+                  items:
+                    type: string
+                  example: ["xxx@xxx.xxx", "nnn@nnn.nnn"]
+
+
+
+     responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/AddUsersToGroupSuccess"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+
+  /api/listUsersInGroup:
+    post:
+     summary: /api/listUsersInGroup
+     description: |
+
+        ## LISTUSERSINGROUP
+        This method lists all users belonging to a group, with their associated permissions.
+
+
+        ### URL
+        ```
+          https://www.scalyr.com/api/listUsersInGroup
+        ```
+
+        <br>
+
+        ### Input
+
+        ```
+          {
+              "token":              "xxx",
+              "groupName" :         "nnn"
+          }
+        ```
+
+        ### Response example
+
+        ```
+          {
+            "users": [
+              {
+                "permissions": "xxx",
+                "email": "xxx@xxx.xxx",
+                // only available when user has ``limited`` permission
+                "allowedDashboards": [
+
+                  "nnn",
+                  "mmm"
+                ],
+                // only available when user has ``limited`` permission
+                "allowedSearch": "nnn",
+                "groups": ["nnn"]
+              }
+              ...
+            ]
+            "status": "success"
+          }
+        ```
+
+     requestBody:
+        content:
+          application/json;charset=UTF-8:
+            schema:
+              type: object
+              required:
+                - token
+                - groupName
+              properties:
+                token:
+                  description: |
+                    **token** URL parameter is a "Read Configuration" API token for your account. You can manage API tokens at [https://www.scalyr.com/keys](https://www.scalyr.com/keys)
+                  type: string
+                  example: read-configuration-api-key
+
+                groupName:
+                  type: string
+                  example: My Group 1
+                  description: |
+                    **groupName** is the name of the group.
+
+
+
+     responses:
+        '200':
+          description: Everything went well
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/ListUsersInGroupSuccess"
+
+        '400':
+          description: Bad request (your fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/4xxError"
+        '500':
+          description: Server issue (our fault). To validate the error, check the "status" using "beginsWith" instead of ==
+          content:
+            application/json;charset=UTF-8:
+              schema:
+                $ref: "#/components/schemas/5xxError"
+
+#----------------------------------------------------------------------------------
+#
+# Components
+#
+# ---------------------------------------------------------------------------------
+
+
+components:
+  schemas:
+    200Success:
+        type: object
+        properties:
+          status:
+            type: string
+        example:
+          status: success
+
+    4xxError:
+      type: object
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+
+      example:
+        message: request must have 'token' field
+        status: error/client/badRequest
+
+    5xxError:
+      type: object
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+      example:
+        message: Server is busy. Unable to process
+        status: error/server/backoff
+
+
+    #/api/addUsersToGroup query success object
+    AddUsersToGroupSuccess:
+      type: object
+      description: |
+        An error is indicated by a response object whose status field does not begin with success. See the API Overview section for details. Otherwise, the response should have the following structure:
+      properties:
+        status:
+          type: string
+          example: success
+        updatedUsers:
+          description: |
+            **updatedUsers** lists the users added to the group. This will not include users who do not exist or who already belonged to the group.
+          type: array
+          items:
+            type: string
+          example: ["xxx@xxx.xxx", "nnn@nnn.nnn"]
+
+    #/api/facetQuery query success object
+    FacetQuerySuccess:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        values:
+          type: array
+          items:
+             $ref: '#/components/schemas/FacetQuery_values'
+        matchCount:
+          type: number
+          description: |
+            **matchCount** gives the total number of events which match the query.
+          example: 100
+        executionTime:
+            type: object
+            description: |
+              executionTime indicates how much time our server spent processing this query, in milliseconds. Your API queries are limited to 30,000 milliseconds of processing time, replenished at 36,000 milliseconds per hour. If you exceed this limit, your queries will be intermittently refused. (Your other uses of Scalyr, such as log uploading or queries via the web site, will not be impacted.) If you need a higher limit, [let us know](support@scalyr.com).
+            example:  12
+
+
+
+
+    #/api/numericQuery query success response object
+    NumericQuerySuccess:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        values:
+          type: array
+          description: |
+            The number of values returned will always be equal to the `buckets` parameter. Each entry will give the value for the corresponding time slice, as determined by the `startTime` and `endTime` parameters. If a value is undefined (e.g. taking the mean or max of a time period which did not contain any values), null is used.
+          items:
+            type: number
+          example:
+            - 1234.5
+            - 1000
+        executionTime:
+            type: object
+            description: |
+              **executionTime** indicates how much time our server spent processing this query, in milliseconds. Your API queries are limited to 30,000 milliseconds of processing time, replenished at 36,000 milliseconds per hour. If you exceed this limit, your queries will be intermittently refused. (Your other uses of Scalyr, such as log uploading or queries via the web site, will not be impacted.) If you need a higher limit, [let us know](support@scalyr.com).
+            example:  12
+
+
+
+    #/api/query query success response object
+    LogQuerySuccess:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/Query_Matches'
+
+
+        sessions:
+          type: object
+          description: |
+            sessions contains an entry for each session mentioned in the matches list. For each session, it lists the fields associated with that session. This includes the hostname and IP address of the server from which you uploaded these events, along with any other fields specified in the sessionInfo parameter of the addEvents API. (For the Scalyr Agent, these are the fields specified in the server_attributes field of the configuration file.)
+          example:
+            sess_d5952fdd-eed2-45f1-8106-b2f2af55dabd:
+              serverHost: some.host.name
+              serverIP: 1.2.3.4
+              session: sess_d5952fdd-eed2-45f1-8106-b2f2af55dabd
+
+        executionTime:
+            type: object
+            description: |
+              executionTime indicates how much time our server spent processing this query, in milliseconds. Your API queries are limited to 30,000 milliseconds of processing time, replenished at 36,000 milliseconds per hour. If you exceed this limit, your queries will be intermittently refused. (Your other uses of Scalyr, such as log uploading or queries via the web site, will not be impacted.) If you need a higher limit, [let us know](support@scalyr.com).
+            example:  12
+
+        continuationToken:
+            type: string
+            description: |
+              continuationToken may be passed to a subsequent API call, to retrieve additional matches. Note that this field may be present in the response even if there are no further matches to retrieve. If you use the continuationToken in a subsequent query, make sure to repeat the same filter, startTime, endTime, and pageMode as the previous query, and set startTime and endTime to absolute values (not relative values such as 4h). If you use relative time values, and the time range drifts so that the continuation token refers to an event that falls outside the new time range, the query will fail.
+            example: L6_ckjI4BgATVPZkxGaUwQ--
+
+    #/api/createTimeseries API success object
+    CreateTimeseriesSuccess:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+
+        timeseriesId:
+          type: string
+          description: |
+            You will use the timeseriesId in subsequent calls to the [timeseriesQuery](https://www.scalyr.com/help/api?teamToken=GHegMHe4UQtLS%2FiIZsLxxg--#timeseriesQuery) method. (Note that it's also possible to call timeseriesQuery without first calling createTimeseries or recording a timeseries ID; see the filter and function parameters to timeseriesQuery.)
+          example:  =GHegMHe224UQtLS%2FiIZsLxxg--
+
+
+        foundExistingSeries:
+          type: boolean
+          description: |
+            If there was already a timeseries with this `filter` and `function`, the existing `timeseries` ID will be returned, and `foundExistingSeries` will be `true`. Otherwise, `foundExistingSeries` will be `false`.
+          example: true
+
+
+    #/listFile API's 200 "success" response object
+    ListFileSuccess:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        paths:
+          type: array
+          items:
+            type: string
+            example: ["/bar", "/baz/file1", "/foo"]
+
+
+    #/getFile API's 200 "success" response object
+    GetFileSuccess:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+          enum:
+            - success
+            - success/unchanged
+            - success/noSuchFile
+        path:
+          type: string
+          description: Same as the path parameter
+          example: "/foo"
+        version:
+          type: string
+          description: current version number
+          example: "v1.0"
+        createDate:
+          type: number
+          description: time when file was created
+          example: 1531345281103
+        modDate:
+          type: number
+          description: time when file was last modified
+          example: 1531345281103
+        content:
+          type: string
+          description: |
+            file content.
+
+            <br>
+
+            **Note**: "content" field won't show up if you've used `expectedVersion` in the query and the file matches that version because you are probably just checking for the version number rather than actually getting the file.
+
+        stalenessSlop:
+          type: number
+          description: reserved for future use
+          example: 1531345281103
+
+
+
+
+    #/api/timeseriesQuery API's 200 "success" response object
+    TimeseriesQuerySuccess:
+      type: object
+      properties:
+         status:
+           type: string
+           example: success
+         results:
+          type: array
+          items:
+            type: object
+            properties:
+              values:
+                type: array
+                items:
+                  type: number
+                example: [1234, 2334]
+                description: |
+                  **results** will have one entry for each entry in the queries parameter. Each result entry contains an array of numeric values, giving the value for each time slice of the corresponding query, as defined by the buckets parameter of that query. If a value is undefined in some time slice, the values array will contain null at that index.
+
+              executionTime:
+                type: number
+                example: 5
+                description: |
+                  **executionTime** indicates how much time our server spent processing this query, in milliseconds. Your API queries are limited to 30,000 milliseconds of processing time, replenished at 36,000 milliseconds per hour. If you exceed this limit, your queries will be intermittently refused. (Your other uses of Scalyr, such as log uploading or queries via the web site, will not be impacted.) If you need a higher limit, [let us know](mailto://support@scalyr.com). `executionTime` is specified for each result. The total execution time is reported in the outer response object.
+
+              foundExistingSeries:
+                type: boolean
+                description: |
+                  If there was already a timeseries with this `filter` and `function`, the existing `timeseries` ID will be returned, a  and `foundExistingSeries` will be `true`. Otherwise, `foundExistingSeries` will be `false`.
+                example: true
+         executionTime:
+           type: number
+           description: Overall execution time
+           example: 5
+
+
+    ListUsersSuccess:
+      type: object
+      properties:
+        status:
+          type: string
+          description: |
+            An error is indicated by a response object whose status field does not begin with success. See the API Overview section for details.
+          example: success
+        users:
+          type: array
+          items:
+            type: object
+          example:
+            - email: alice@example.com
+              permissions: limited
+              allowedSearch: "$serverHost='server-1' (** Note: only for users with **limited** access)" #<-- users with "limited" access
+              allowedDashboards:
+              - "**Note: only for users with **limited** access"
+              - Log Volume
+              - WebServer
+            - email: bob@example.com
+              permissions: full
+
+    ListUsersInGroupSuccess:
+      type: object
+      properties:
+        status:
+          type: string
+          description: |
+            An error is indicated by a response object whose status field does not begin with success. See the API Overview section for details.
+
+          example: success
+        users:
+          description: |
+            This contains a list of all users belonging to the group, with their associated permissions. The schema is the same as in the [/scalyr/logs configuration file](https://www.scalyr.com/help/users#syntax), but the response will be pure JSON with no comments or other nonstandard features.
+          type: array
+          items:
+            type: object
+          example:
+            - email: alice@example.com
+              permissions: limited
+              allowedSearch: "$serverHost='server-1' (** Note: only for users with **limited** access)" #<-- users with "limited" access
+              allowedDashboards:
+              - "**Note: only for users with **limited** access"
+              - Log Volume
+              - WebServer
+            - email: bob@example.com
+              permissions: full
+
+    ListGroupsSuccess:
+      type: object
+      properties:
+        status:
+          type: string
+          description: |
+            An error is indicated by a response object whose status field does not begin with success. See the API Overview section for details.
+          example: success
+        groups:
+          description: |
+            This contains a list of all groups in this team, with their associated permissions. The schema is the same as in the /scalyr/logs configuration file, but the response will be pure JSON with no comments or other nonstandard features.
+          type: array
+          items:
+            type: object
+          example:
+            - name: My Group 1
+              permissions: limited
+              allowedSearch: "$serverHost='server-1' (** Note: only for groups with **limited** access)" #<-- groups with "limited" access
+              allowedDashboards:
+              - "**Note: only for groups with **limited** access"
+              - Log Volume
+              - WebServer
+            - name: My Group 2
+              permissions: full
+
+
+
+
+
+    #/api/timeseriesQuery api's "queries" object
+    TimeseriesQuery_queries:
+      type: object
+      description: |
+        **queries** should be an array of query specifications. For each query, specify `timeseriesId` (as returned by a previous call to `createTimeseries`), `startTime`, `endTime`, and `buckets`. The latter parameters have the same meaning as for [numericQuery](https://www.scalyr.com/help/api?teamToken=GHegMHe4UQtLS%2FiIZsLxxg--#numericQuery). `endTime` and `buckets` are optional, defaulting to the present time and one bucket. Each query will use the `filter` and `function` specified in the corresponding call to `createTimeseries`.
+
+        <br>
+
+        `filter` and `function` directly specify a query to be performed, with the same meaning as for the `numericQuery` method. For each query, you should specify either a `timeseriesId`, or a `filter` and `function`, but not both.  When you call `timeseriesQuery` with a `filter` argument, if no `timeseries` with this `filter` and `function` exist, it will create a new `timeseries` (just like `createTimeseries`). Therefore, all calls to `timeseriesQuery` with a `filter` argument require a **"Write Configuration" API token**; this is required even if the timeseries happens to already exist.
+
+        <br>
+        ### Note:
+
+        You can create at most 10,000 timeseries. To avoid accidental exhaustion of this limit, creation of new timeseries is limited to 100 per hour, with bursts of up to 100. (If you need to create timeseries more rapidly, contact us at support@scalyr.com.) Calls to timeseriesQuery are only subject to this rate limit if they cause a new timeseries to be created.
+
+      properties:
+        timeseriesId:
+          type: string
+          description: This is from the response of the previous call to `createTimeseries`
+          example: =GHegMHe224UQtLS%2FiIZsLxxg--
+        filter:
+          description: |
+              **filter** specifies which events to match, using the same syntax as the Expression field in the query UI. To match all events, omit this field or pass an empty string.
+          type: string
+          example: "$serverHost='server-1'"
+
+        function:
+          description: |
+              **function** specifies the value to compute from the matching events. You can use any function listed in [Graph Functions](https://www.scalyr.com/help/query-language#graphFunctions), except for `fraction(expr)`.
+
+              <br>
+
+              For example: `mean(x)` or `median(responseTime)`, if `x` and `responseTime` are fields of your log. You can also specify a simple field name, such as `responseTime`, to return the `mean` value of that field. If you omit the function argument, the rate of matching events per second will be returned. Specifying rate yields the same result.
+          type: string
+          example: "mean(<fieldName>)"
+
+        startTime:
+          description: |
+            **startTime** and **endTime** specify the time range to query, using the same syntax as the Start and End fields in the query UI. You can also supply a simple timestamp, measured in seconds, milliseconds, or nanoseconds since 1/1/1970.
+
+            The default is to query the last 24 hours. If you specify `startTime` but not `endTime`, the query covers 24 hours beginning at the `startTime`. If you specify `endTime` but not `startTime`, the query covers 24 hours ending at the `endTime`.
+          type: string
+          example: 1531332411133
+
+        endTime:
+          description: |
+            **startTime** and **endTime** specify the time range to query, using the same syntax as the Start and End fields in the query UI. You can also supply a simple timestamp, measured in seconds, milliseconds, or nanoseconds since 1/1/1970.
+
+            The default is to query the last 24 hours. If you specify startTime but not endTime, the query covers 24 hours beginning at the startTime. If you specify endTime but not startTime, the query covers 24 hours ending at the endTime.
+          type: string
+          example: 1531332411133
+
+        buckets:
+          description: |
+            buckets specifies the number of numeric values to return. The time range is divided into this many equal slices. For instance, suppose you query a four-hour period, with buckets = 4. The query will return four numbers, each covering a one-hour period.
+
+            You may specify a value from 1 to 5000. The default is 1.
+          type: number
+          minimum: 1
+          maximum: 5000
+          default: 1
+          example: 100
+
+        priority:
+          description: |
+            **priority** specifies the execution priority for this query; defaults to "low". Use "low" for background operations where a delay of a second or so is acceptable. Low-priority queries have more generous rate limits
+          type: string
+          default: low
+          example: low
+          enum:
+            - high
+            - medium
+            - low
+
+
+
+
+    #/api/facetQuery api's "values" object
+    FacetQuery_values:
+      type: object
+      description: |
+        The number of `values` returned will be equal to the `maxCount` parameter, or the total number of unique values for this field, whichever is smaller. Values will be sorted by decreasing count.
+      properties:
+        value:
+          type: string
+          example: "aaa"
+        count:
+          type: number
+          example: 100
+
+    #/api/query api's response' "matches" object
+    Query_Matches:
+      type: object
+      description: |
+        `matches` lists the events matching the query, up to `maxCount`. Matches are always given in ascending timestamp order, regardless of whether you are paging forwards or backwards. Each match contains the following fields
+      properties:
+        timestamp:
+          type: string
+          description: The time of this event, in nanoseconds since 1/1/1970
+          example: 1393009097459537089
+        message:
+          type: string
+          description: The raw log line from which this record was derived. If the record was created using the addEvents API and did not specify a message field, this field will be empty or missing.
+          example: 'hello, world'
+        severity:
+            type: string
+            description: |
+              A severity level, using the standard 0-6 numbering scheme. By default, records have a value of 3 ("info").
+            example: 3
+        session:
+            type: string
+            description: The session ID for this record, as specified in the addEvents API.
+            example: sess_d5952fdd-eed2-45f1-8106-b2f2af55dabd
+        thread:
+            type: string
+            description: The thread ID for this record, as specified in the addEvents API.
+            example: '28'
+        fields:
+            type: object
+            description: |
+              Additional fields for this record, as created by a log parser or in the `addEvents` API.
+
+              (If you specify a columns list, any fields not listed will not appear in the match objects. This applies to built-in fields like timestamp and message, as well as fields in the fields object.)
+            example:
+              fields:
+                tag: foo
+
+
+    #Event object
+    Event:
+      type: object
+      required:
+      - thread
+      - ts
+      - type
+      properties:
+        thread:
+          type: string
+          description: |
+            The type field indicates a "normal" event, or the beginning or end of an event pair. A normal event has type 0, start events have type 1, and end events have type 2. This field is optional (defaults to 0).
+          example: "1"
+        ts:
+          type: string
+          description: |
+            Note that the timestamp is specified as a string, not a number. This is because some JSON packages convert all numbers to floating-point, and a standard 64-bit floating point value does not have sufficient resolution for a nanosecond timestamp. Scalyr uses timestamps internally to identify events, so the ts field must be strictly increasing — each event must have a larger timestamp than the preceding event. This applies to all /addEvents invocations for a given session; each session (identified by the session parameter to /addEvents) has an independent timestamp sequence. So one easy way to ensure valid timestamps is for each client to keep track of the last timestamp it used, and ensure that the next timestamp it generates is at least 1 (nanosecond) larger.
+          example: "1530912695846000000"
+        type:
+          type: number
+          description: The type field indicates a "normal" event, or the beginning or end of an event pair. A normal event has type 0, start events have type 1, and end events have type 2. This field is optional (defaults to 0).
+          default: 0
+
+        sev:
+          type: number
+          description: The "sev" (severity) field should range from 0 to 6, and identifies the importance of this event, using the classic scale "finest, finer, fine, info, warning, error, fatal". This field is optional (defaults to 3 / info).
+          enum:
+            - 0
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+          default: 3
+        attrs:
+          $ref: '#/components/schemas/EventAttrs'
+
+    #Event "attrs" object
+    EventAttrs:
+        type: object
+        description: |
+          The attrs field specifies the "content" of the event. This could be any data you are interested in. A simple event might contain only a single text field \{ message: \"record 39217 retrieved in 19.4ms; 39207 bytes\"\}. However, it's better to break out individual components so that they can be queried on later.
+
+          **Note that numeric values should be passed as JSON numbers, not quoted strings.**
+
+
+        properties:
+          message:
+            type: string
+          recordId:
+            type: number
+          latency:
+            type: number
+          length:
+            type: number
+        example:
+          message: record retrieved
+          recordId: 39217
+          latency: 19.4
+          length: 39207
+
+    #SessionInfo object
+    SessionInfoObject:
+      type: object
+      description: |
+        **sessionInfo is optional**. It can be used to specify fields associated with the uploading process. These fields can then be used when querying the uploaded events.
+
+        You should generally specify at least a serverHost field, containing your hostname or some other stable server identifier. Scalyr uses this value to organize events from different servers.
+
+        sessionInfo should remain the same for all API invocations that share a session value. If not, Scalyr might ignore the changes to sessionInfo and associate the original sessionInfo with all events for that session.
+      properties:
+        serverHost:
+          type: string
+        serverType:
+          type: string
+        region:
+          type: string
+      example:
+        serverHost: front-1
+        serverType: frontend
+        region: us-east-1
+
+    AddEvents_Threads:
+      type: object
+      properties:
+          id:
+            type: string
+          name:
+            type: string
+      example:
+          -
+            id: 1
+            name: "request handler thread"
+          -
+            id: 2
+            name: "background processing thread"
