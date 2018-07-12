@@ -6,7 +6,7 @@ This project contains:
 
 ## 🚀 Live documentation:  
 
-The live docs app is <a src="https://scalyr-oas3.netlify.com/#/paths/~1api~1createTimeseries/post">hosted here</a>. Feel free to play around!
+The live docs app is <a href="https://scalyr-oas3.netlify.com/#/paths/~1api~1createTimeseries/post" target="_blank">hosted here</a>. Feel free to play around!
 
 
 <img src="./redoc-pic.png" />
